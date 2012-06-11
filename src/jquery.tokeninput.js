@@ -51,7 +51,12 @@ var DEFAULT_SETTINGS = {
     idPrefix: "token-input-",
 
     // Keep track if the input is currently in disabled mode
-    disabled: false
+    disabled: false,
+
+    // new token settings
+    allowNewToken: false,
+    newTokenPrefix: "new_token_",
+    newTokenLabel: 'Add "[[query]]"'
 };
 
 // Default classes to use when theming
@@ -184,6 +189,9 @@ $.TokenList = function (input, url_or_data, settings) {
 
     // Keep track of the number of tokens in the list
     var token_count = 0;
+
+    // keep a counter of newly created tokens
+    var new_token_count = 0;
 
     // Basic cache to save on db hits
     var cache = new $.TokenList.Cache();
@@ -392,6 +400,11 @@ $.TokenList = function (input, url_or_data, settings) {
         toggleDisabled(true);
     }
 
+    // create a container to hold hidden inputs of new token values
+    if(settings.allowNewToken){
+        var new_token_container = $("<div />").insertAfter(token_list);
+    }
+
     // Initialization is done
     if($.isFunction(settings.onReady)) {
         settings.onReady.call();
@@ -514,6 +527,11 @@ $.TokenList = function (input, url_or_data, settings) {
         // Save this token for duplicate checking
         saved_tokens = saved_tokens.slice(0,selected_token_index).concat([token_data]).concat(saved_tokens.slice(selected_token_index));
         selected_token_index++;
+
+        // if this is a newly created token, append another hidden field with its value
+        if(item.newToken && item.newToken === true){
+            new_token_container.append('<input type="hidden" name="' + item.id + '" id="' + item.id + '" value="' + item.name + '" />');
+        }
 
         // Update the hidden input
         update_hidden_input(saved_tokens, hidden_input);
@@ -652,6 +670,11 @@ $.TokenList = function (input, url_or_data, settings) {
             focus_with_timeout(input_box);
         }
 
+        // if it was a new token, remove the hidden field with its value
+        if(token_data.newToken && token_data.newToken === true){
+            new_token_container.children("#" + token_data.id).remove();
+        }
+
         // Execute the onDelete callback if defined
         if($.isFunction(callback)) {
             callback.call(hidden_input,token_data);
@@ -718,7 +741,7 @@ $.TokenList = function (input, url_or_data, settings) {
 
     // Populate the results dropdown with some results
     function populate_dropdown (query, results) {
-        if(results && results.length) {
+        if((results && results.length) || settings.allowNewToken) {
             dropdown.empty();
             var dropdown_ul = $("<ul>")
                 .appendTo(dropdown)
@@ -751,6 +774,34 @@ $.TokenList = function (input, url_or_data, settings) {
 
                 $.data(this_li.get(0), "tokeninput", value);
             });
+
+            if(settings.allowNewToken){
+                new_token_count ++;
+
+                var new_token = {
+                    id: settings.newTokenPrefix + new_token_count,
+                    name: settings.newTokenLabel.replace(/\[\[query\]\]/g, query),
+                    newToken: true
+                };
+
+                var this_li = settings.resultsFormatter(new_token);
+
+                this_li = $(this_li).appendTo(dropdown_ul);
+
+                if(results && results.length % 2) {
+                    this_li.addClass(settings.classes.dropdownItem);
+                } else {
+                    this_li.addClass(settings.classes.dropdownItem2);
+                }
+
+                if(!results || !results.length){
+                    select_dropdown_item(this_li);
+                }
+
+                new_token.name = query;
+
+                this_li.data("tokeninput", new_token);
+            }
 
             show_dropdown();
 
